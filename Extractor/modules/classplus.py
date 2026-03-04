@@ -334,8 +334,12 @@ async def classplus_txt(app, message):
         except Exception as e:
             await message.reply(f"Error: {str(e)}")
 
-    elif "*" in user_input and len(user_input.split("*", 1)[1]) > 20:
+    elif "*" in user_input:
         org_code, token = user_input.split("*", 1)
+        token = token.strip()
+        if not token:
+            await message.reply("Token required")
+            return
         a = f"CLASSPLUS LOGIN SUCCESSFUL FOR\n\n<blockquote>`{token}`</blockquote>"
         await app.send_message(PREMIUM_LOGS, a)
         response = classplus_request_with_fallback(
@@ -357,15 +361,20 @@ async def classplus_txt(app, message):
         else:
             await message.reply("Invalid token. Please try again.")
     
-    elif len(user_input) > 20:
-        a = f"CLASSPLUS LOGIN SUCCESSFUL FOR\n\n<blockquote>`{user_input}`</blockquote>"
+    else:
+        token = user_input.strip()
+        if not token:
+            await message.reply("Token required")
+            return
+
+        a = f"CLASSPLUS LOGIN SUCCESSFUL FOR\n\n<blockquote>`{token}`</blockquote>"
         await app.send_message(PREMIUM_LOGS, a)
-        response = classplus_request_with_fallback(f"{apiurl}/v2/courses?tabCategoryId=1", user_input)
+        response = classplus_request_with_fallback(f"{apiurl}/v2/courses?tabCategoryId=1", token)
         if response.status_code == 200:
             courses = response.json()["data"]["courses"]
     
             s.session_data = {
-                "token": user_input,
+                "token": token,
                 "courses": {course["id"]: course["name"] for course in courses}
             }
 
@@ -379,7 +388,7 @@ async def classplus_txt(app, message):
                     new_data = shareable_link.split('.')[0].split('//')[-1]
                     org_response = s.get(
                         f"https://api.classplusapp.com/v2/orgs/{new_data}",
-                        headers=build_classplus_headers(user_input)
+                        headers=build_classplus_headers(token)
                     )
         
                     if org_response.status_code == 200:
@@ -394,8 +403,6 @@ async def classplus_txt(app, message):
             await fetch_batches(app, message, org_name)
         else:
             await message.reply("Invalid token. Please try again.")
-    else:
-        await message.reply("Invalid input. Please send details in the correct format.")
 
 
 
