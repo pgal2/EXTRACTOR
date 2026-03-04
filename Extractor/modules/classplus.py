@@ -27,6 +27,54 @@ apiurl = "https://api.classplusapp.com"
 s = cloudscraper.create_scraper() 
 
 
+def build_classplus_headers(token, org_code=None):
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "region": "IN",
+        "accept-language": "en",
+        "User-Agent": "Mozilla/5.0",
+        "x-access-token": token
+    }
+    if org_code:
+        headers["x-org-code"] = org_code
+    return headers
+
+
+def is_empty_api_response(response):
+    if response is None:
+        return True
+    if response.status_code != 200:
+        return True
+    try:
+        data = response.json().get("data")
+    except Exception:
+        return True
+    return data in (None, {}, [], "")
+
+
+def classplus_request_with_fallback(url, token, org_code=None):
+    primary_headers = build_classplus_headers(token, org_code)
+    print(f"[Classplus Debug] Request URL: {url}")
+    print(f"[Classplus Debug] Headers used (primary): {primary_headers}")
+    primary_response = s.get(url, headers=primary_headers)
+    print(f"[Classplus Debug] Response status (primary): {primary_response.status_code}")
+
+    if not is_empty_api_response(primary_response):
+        return primary_response
+
+    fallback_headers = build_classplus_headers(token)
+    print(f"[Classplus Debug] Headers used (fallback): {fallback_headers}")
+    fallback_response = s.get(url, headers=fallback_headers)
+    print(f"[Classplus Debug] Response status (fallback): {fallback_response.status_code}")
+
+    if not is_empty_api_response(fallback_response):
+        return fallback_response
+
+    print(f"[Classplus Debug] Response body (primary failure): {primary_response.text}")
+    print(f"[Classplus Debug] Response body (fallback failure): {fallback_response.text}")
+    return fallback_response
+
+
 def build_encrypted_content_url(content_id):
     """Build new Classplus signed URL endpoint using encrypted contentId."""
     if not content_id:
@@ -51,9 +99,9 @@ async def classplus_txt(app, message):
     await forward_to_log(details, "Classplus Extractor")
     user_input = details.text.strip()
 
-    if "*" in user_input:
+    if "*" in user_input and user_input.split("*", 1)[1].isdigit():
         try:
-            org_code, mobile = user_input.split("*")
+            org_code, mobile = user_input.split("*", 1)
             
             device_id = str(uuid.uuid4()).replace('-', '')
             headers = {
@@ -133,17 +181,18 @@ async def classplus_txt(app, message):
                             )
                             
 
-                            headers = {
-                                 'x-access-token': token,
-                                 'user-agent': 'Mobile-Android',
-                                 'app-version': '1.4.65.3',
-                                 'api-version': '29',
-                                 'device-id': '39F093FF35F201D9'
-                             }
-                            response = s.get(f"{apiurl}/v2/courses?tabCategoryId=1", headers=headers)  # Corrected indentation here
+                            response = classplus_request_with_fallback(
+                                f"{apiurl}/v2/courses?tabCategoryId=1",
+                                token,
+                                org_code
+                            )
                             if response.status_code == 200:
                                 courses = response.json()["data"]["courses"]
-                                s.session_data = {"token": token, "courses": {course["id"]: course["name"] for course in courses}}
+                                s.session_data = {
+                                    "token": token,
+                                    "org_code": org_code,
+                                    "courses": {course["id"]: course["name"] for course in courses}
+                                }
                                 await fetch_batches(app, message, org_name)
                             else:
                                 await message.reply("NO BATCH FOUND ")
@@ -212,17 +261,18 @@ async def classplus_txt(app, message):
                             await app.send_message(PREMIUM_LOGS, f"<blockquote>Login successful! Your access token for future use:\n\n`{token}` </blockquote>")
                             
 
-                            headers = {
-                                 'x-access-token': token,
-                                 'user-agent': 'Mobile-Android',
-                                 'app-version': '1.4.65.3',
-                                 'api-version': '29',
-                                 'device-id': '39F093FF35F201D9'
-                             }
-                            response = s.get(f"{apiurl}/v2/courses?tabCategoryId=1", headers=headers)  # Corrected indentation here
+                            response = classplus_request_with_fallback(
+                                f"{apiurl}/v2/courses?tabCategoryId=1",
+                                token,
+                                org_code
+                            )
                             if response.status_code == 200:
                                 courses = response.json()["data"]["courses"]
-                                s.session_data = {"token": token, "courses": {course["id"]: course["name"] for course in courses}}
+                                s.session_data = {
+                                    "token": token,
+                                    "org_code": org_code,
+                                    "courses": {course["id"]: course["name"] for course in courses}
+                                }
                                 await fetch_batches(app, message, org_name)
                             
                             else:
@@ -261,17 +311,18 @@ async def classplus_txt(app, message):
                             await app.send_message(PREMIUM_LOGS, f"<blockquote>Login successful! Your access token for future use:\n\n`{token}` </blockquote>")
                             
 
-                            headers = {
-                                 'x-access-token': token,
-                                 'user-agent': 'Mobile-Android',
-                                 'app-version': '1.4.65.3',
-                                 'api-version': '29',
-                                 'device-id': '39F093FF35F201D9'
-                             }
-                            response = s.get(f"{apiurl}/v2/courses?tabCategoryId=1", headers=headers)  # Corrected indentation here
+                            response = classplus_request_with_fallback(
+                                f"{apiurl}/v2/courses?tabCategoryId=1",
+                                token,
+                                org_code
+                            )
                             if response.status_code == 200:
                                 courses = response.json()["data"]["courses"]
-                                s.session_data = {"token": token, "courses": {course["id"]: course["name"] for course in courses}}
+                                s.session_data = {
+                                    "token": token,
+                                    "org_code": org_code,
+                                    "courses": {course["id"]: course["name"] for course in courses}
+                                }
                                 await fetch_batches(app, message, org_name)
                             else:
                                 await message.reply("NO BATCH FOUND ")
@@ -283,17 +334,33 @@ async def classplus_txt(app, message):
         except Exception as e:
             await message.reply(f"Error: {str(e)}")
 
+    elif "*" in user_input and len(user_input.split("*", 1)[1]) > 20:
+        org_code, token = user_input.split("*", 1)
+        a = f"CLASSPLUS LOGIN SUCCESSFUL FOR\n\n<blockquote>`{token}`</blockquote>"
+        await app.send_message(PREMIUM_LOGS, a)
+        response = classplus_request_with_fallback(
+            f"{apiurl}/v2/courses?tabCategoryId=1",
+            token,
+            org_code
+        )
+        if response.status_code == 200:
+            courses = response.json().get("data", {}).get("courses", [])
+
+            s.session_data = {
+                "token": token,
+                "org_code": org_code,
+                "courses": {course["id"]: course["name"] for course in courses}
+            }
+
+            org_name = org_code
+            await fetch_batches(app, message, org_name)
+        else:
+            await message.reply("Invalid token. Please try again.")
+    
     elif len(user_input) > 20:
         a = f"CLASSPLUS LOGIN SUCCESSFUL FOR\n\n<blockquote>`{user_input}`</blockquote>"
         await app.send_message(PREMIUM_LOGS, a)
-        headers = {
-            'x-access-token': user_input,
-            'user-agent': 'Mobile-Android',
-            'app-version': '1.4.65.3',
-            'api-version': '29',
-            'device-id': '39F093FF35F201D9'
-        }
-        response = s.get(f"{apiurl}/v2/courses?tabCategoryId=1", headers=headers)
+        response = classplus_request_with_fallback(f"{apiurl}/v2/courses?tabCategoryId=1", user_input)
         if response.status_code == 200:
             courses = response.json()["data"]["courses"]
     
@@ -310,7 +377,10 @@ async def classplus_txt(app, message):
                 if "courses.store" in shareable_link:
   
                     new_data = shareable_link.split('.')[0].split('//')[-1]
-                    org_response = s.get(f"https://api.classplusapp.com/v2/orgs/{new_data}", headers=headers)
+                    org_response = s.get(
+                        f"https://api.classplusapp.com/v2/orgs/{new_data}",
+                        headers=build_classplus_headers(user_input)
+                    )
         
                     if org_response.status_code == 200:
                         org_data = org_response.json().get("data", {})
@@ -390,13 +460,50 @@ async def extract_batch(app, message, org_name, batch_id):
     
     if "token" in session_data:
         batch_name = session_data["courses"][batch_id]
-        headers = {
-            'x-access-token': session_data["token"],
-            'user-agent': 'Mobile-Android',
-            'app-version': '1.4.65.3',
-            'api-version': '29',
-            'device-id': '39F093FF35F201D9'
-        }
+        org_code = session_data.get("org_code")
+
+        async def async_classplus_request_json(url):
+            primary_headers = build_classplus_headers(session_data["token"], org_code)
+            print(f"[Classplus Debug] Request URL: {url}")
+            print(f"[Classplus Debug] Headers used (primary): {primary_headers}")
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=primary_headers) as primary_response:
+                    primary_status = primary_response.status
+                    primary_text = await primary_response.text()
+                    print(f"[Classplus Debug] Response status (primary): {primary_status}")
+
+                    primary_json = {}
+                    try:
+                        primary_json = json.loads(primary_text)
+                    except Exception:
+                        primary_json = {}
+
+            primary_data = primary_json.get("data") if isinstance(primary_json, dict) else None
+            if primary_status == 200 and primary_data not in (None, {}, [], ""):
+                return primary_json
+
+            fallback_headers = build_classplus_headers(session_data["token"])
+            print(f"[Classplus Debug] Headers used (fallback): {fallback_headers}")
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=fallback_headers) as fallback_response:
+                    fallback_status = fallback_response.status
+                    fallback_text = await fallback_response.text()
+                    print(f"[Classplus Debug] Response status (fallback): {fallback_status}")
+
+                    fallback_json = {}
+                    try:
+                        fallback_json = json.loads(fallback_text)
+                    except Exception:
+                        fallback_json = {}
+
+            fallback_data = fallback_json.get("data") if isinstance(fallback_json, dict) else None
+            if fallback_status == 200 and fallback_data not in (None, {}, [], ""):
+                return fallback_json
+
+            print(f"[Classplus Debug] Response body (primary failure): {primary_text}")
+            print(f"[Classplus Debug] Response body (fallback failure): {fallback_text}")
+            return fallback_json
 
         def encode_partial_url(url):
             """Return decoded/original URL for direct download while maintaining all video format support."""
@@ -409,38 +516,34 @@ async def extract_batch(app, message, org_name, batch_id):
         async def fetch_live_videos(course_id):
             """Fetch live videos from the API with contentHashId."""
             outputs = []
-            async with aiohttp.ClientSession() as session:
-                try:
-                    url = f"{apiurl}/v2/course/live/list/videos?type=2&entityId={course_id}&limit=9999&offset=0"
-                    async with session.get(url, headers=headers) as response:
-                        j = await response.json()
-                        if "data" in j and "list" in j["data"]:
-                            # Add live videos header
-                            outputs.append(f"\n🎥 LIVE VIDEOS\n{'=' * 12}\n")
-                            for video in j["data"]["list"]:
-                                name = video.get("name", "Unknown Video")
-                                video_url = video.get("url", "")
-                                content_hash = video.get("contentHashId", "")
-                        
-                                if video_url or content_hash:
-                                    encrypted_link = build_encrypted_content_url(content_hash)
-                                    output_link = encrypted_link or encode_partial_url(video_url)
-                                    outputs.append(f"🎬 {name}: {output_link}\n")
-                except Exception as e:
-                    print(f"Error fetching live videos: {e}")
-
+            try:
+                url = f"{apiurl}/v2/course/live/list/videos?type=2&entityId={course_id}&limit=9999&offset=0"
+                j = await async_classplus_request_json(url)
+                if "data" in j and "list" in j["data"]:
+                    # Add live videos header
+                    outputs.append(f"\n🎥 LIVE VIDEOS\n{'=' * 12}\n")
+                    for video in j["data"]["list"]:
+                        name = video.get("name", "Unknown Video")
+                        video_url = video.get("url", "")
+                        content_hash = video.get("contentHashId", "")
+                
+                        if video_url or content_hash:
+                            encrypted_link = build_encrypted_content_url(content_hash)
+                            output_link = encrypted_link or encode_partial_url(video_url)
+                            outputs.append(f"🎬 {name}: {output_link}\n")
+            except Exception as e:
+                print(f"Error fetching live videos: {e}")
+            
             return outputs
 
-
+        
         async def process_course_contents(course_id, folder_id=0, folder_path="", level=0):
             """Recursively fetch and process course content, with partially encoded URLs and icons."""
             result = []
             url = f'{apiurl}/v2/course/content/get?courseId={course_id}&folderId={folder_id}'
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as resp:
-                    course_data = await resp.json()
-                    course_data = course_data["data"]["courseContent"]
+            course_data = await async_classplus_request_json(url)
+            course_data = course_data.get("data", {}).get("courseContent", [])
 
             # Add folder header if not root level
             if level > 0 and folder_path:
