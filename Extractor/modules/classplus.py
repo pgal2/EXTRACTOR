@@ -75,15 +75,42 @@ def classplus_request_with_fallback(url, token, org_code=None):
     return fallback_response
 
 
-def build_encrypted_content_url(content_id):
-    """Build new Classplus signed URL endpoint using encrypted contentId."""
+def fetch_jw_signed_url(content_id, token):
+    """Resolve a Classplus content hash to a signed URL via API."""
+    token = (token or "").strip()
+    if not token:
+        return None, "Token required"
     if not content_id:
-        return ""
-    # Keep raw Base64 chars (+, /, =) untouched to match Classplus expected format.
-    return (
-        "https://api.classplusapp.com/cams/uploader/video/jw-signed-url"
-        f"?contentId={str(content_id)}"
+        return None, None
+
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "region": "IN",
+        "accept-language": "en",
+        "User-Agent": "Mozilla/5.0",
+        "x-access-token": token,
+    }
+    response = s.get(
+        "https://api.classplusapp.com/cams/uploader/video/jw-signed-url",
+        params={"contentId": str(content_id)},
+        headers=headers,
     )
+
+    if response.status_code == 401:
+        return None, "Invalid or expired token"
+
+    try:
+        payload = response.json()
+    except Exception:
+        return None, None
+
+    if payload.get("success") is False:
+        return None, "Invalid or expired token"
+
+    signed_url = payload.get("url")
+    if payload.get("success") is True and signed_url:
+        return signed_url, None
+    return None, None
 
 @app.on_message(filters.command(["cp"]))
 async def classplus_txt(app, message):
@@ -358,8 +385,10 @@ async def classplus_txt(app, message):
 
             org_name = org_code
             await fetch_batches(app, message, org_name)
+        elif response.status_code == 401:
+            await message.reply("Invalid or expired token")
         else:
-            await message.reply("Invalid token. Please try again.")
+            await message.reply("Unable to fetch courses for this account.")
     
     else:
         token = user_input.strip()
@@ -401,8 +430,10 @@ async def classplus_txt(app, message):
                 print(f"Org Name: {org_name}")
 
             await fetch_batches(app, message, org_name)
+        elif response.status_code == 401:
+            await message.reply("Invalid or expired token")
         else:
-            await message.reply("Invalid token. Please try again.")
+            await message.reply("Unable to fetch courses for this account.")
 
 
 
@@ -535,8 +566,10 @@ async def extract_batch(app, message, org_name, batch_id):
                         content_hash = video.get("contentHashId", "")
                 
                         if video_url or content_hash:
-                            encrypted_link = build_encrypted_content_url(content_hash)
-                            output_link = encrypted_link or encode_partial_url(video_url)
+                            signed_url, token_error = fetch_jw_signed_url(content_hash, session_data["token"])
+                            if token_error == "Invalid or expired token":
+                                raise PermissionError(token_error)
+                            output_link = signed_url or encode_partial_url(video_url)
                             outputs.append(f"🎬 {name}: {output_link}\n")
             except Exception as e:
                 print(f"Error fetching live videos: {e}")
@@ -592,7 +625,10 @@ async def extract_batch(app, message, org_name, batch_id):
                         
                         # Use encrypted contentId endpoint for videos, keep source URL for non-videos
                         if icon == "🎬":
-                            output_link = build_encrypted_content_url(content_hash) or encode_partial_url(video_url)
+                            signed_url, token_error = fetch_jw_signed_url(content_hash, session_data["token"])
+                            if token_error == "Invalid or expired token":
+                                raise PermissionError(token_error)
+                            output_link = signed_url or encode_partial_url(video_url)
                         else:
                             output_link = encode_partial_url(video_url)
 
@@ -620,10 +656,14 @@ async def extract_batch(app, message, org_name, batch_id):
                 file.write(''.join(extracted_data))  
             return file_path
 
-        extracted_data, live_videos = await asyncio.gather(
-            process_course_contents(batch_id),
-            fetch_live_videos(batch_id)
-        )
+        try:
+            extracted_data, live_videos = await asyncio.gather(
+                process_course_contents(batch_id),
+                fetch_live_videos(batch_id)
+            )
+        except PermissionError as e:
+            await message.reply(str(e))
+            return
 
         extracted_data.extend(live_videos)
         file_path = await write_to_file(extracted_data)
